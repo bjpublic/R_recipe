@@ -1,0 +1,20 @@
+```{r message = F, echo = F}
+## 필요 패키지 로드
+library(DT)
+library(plotly)
+```
+
+#### DT package 의 예제코드
+
+```{r echo = F}
+mtcars %>% datatable
+```
+
+#### plotly package 의 예제코드
+
+```{r echo = F}
+p <- ggplot(mtcars, aes(mpg, hp)) + 
+    geom_point()
+
+ggplotly(p)
+```

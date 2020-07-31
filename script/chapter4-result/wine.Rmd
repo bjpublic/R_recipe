@@ -1,0 +1,35 @@
+## 분석 대상 `wine` 준비
+
+`rattle.data` 패키지에 있는 데이터 셋 `wine` 을 확인합니다.
+
+```{r message = F}
+library(dplyr)
+library(rattle.data) # rattle.data 패키지가 없는 경우 install.packages('rattle.data') 를 통해 설치합니다.
+
+wine %>% as_tibble
+```
+
+## `Type` 별 와인의 알코올 도수 평균
+
+`Type` 별로 `Alcohol` 의 평균을 확인합니다.
+
+```{r message = F}
+wine %>% 
+  group_by(Type) %>% 
+  summarize(avg_alcohol = mean(Alcohol))
+```
+
+## `Type` 별 와인의 알코올 도수 분포
+
+`Type` 별로 `Alcohol` 의 분포를 Boxplot 으로 확인합니다.
+
+```{r message = F}
+library(ggplot2) # ggplot2 패키지가 없는 경우 install.packages('ggplot2') 를 통해 설치합니다.
+
+wine %>% 
+  ggplot(aes(x = Type, y = Alcohol)) + 
+  geom_boxplot() + 
+  labs(title = 'Alcohol Boxplot by Type')
+```
+
+와인의 도수는 1번 타입이 높은 편이고, 2번 타입이 낮은 편 입니다. 하지만 2번 타입 중 몇몇의 와인은 1번의 특정 와인보다 알코올 도수가 높은 와인도 존재함을 알 수 있습니다.
