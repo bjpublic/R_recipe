@@ -1,0 +1,305 @@
+```{r echo = F, warning = F, message = F}
+pacman::p_load(arrow, bit64, corrplot, cowplot, cronR, data.table, DBI, DT, foreign, fst, ggplot2, jsonlite, knitr, lubridate, magrittr, patchwork, plotly, RSQLite, scales, sessioninfo, tibble, tidyr, tidyverse)
+opts_chunk$set(fig.path = "output/figure/", fig.align = "center", out.width = "95%", warning = F, message = F)
+theme_set(theme_bw(base_family = "AppleGothic"))
+source_code_eval <- F
+```
+
+# 통계&수치 연산 예제{#statistic}
+
+## 샘플링(Sampling){#statistic-1}
+
+```{r eval = source_code_eval, echo = T}
+sample(1:10, 1)
+```
+
+```{r eval = source_code_eval, echo = T}
+replicate(100, sample(1:10, 1))
+```
+
+```{r eval = source_code_eval, echo = T}
+airquality %>% as_tibble
+```
+
+```{r eval = source_code_eval, echo = T}
+seq(nrow(airquality))
+```
+
+```{r eval = source_code_eval, echo = T}
+i <- sample(seq(nrow(airquality)), 20)
+i
+```
+
+```{r eval = source_code_eval, echo = T}
+airquality[i, ]
+```
+
+```{r eval = source_code_eval, echo = T}
+airquality %>% 
+	sample_n(20)
+```
+
+```{r eval = source_code_eval, echo = T}
+airquality %>% 
+	group_by(Month) %>% 
+	sample_n(1)
+```
+
+```{r eval = source_code_eval, echo = T}
+airquality %>% 
+	group_by(Month) %>% 
+	sample_frac(.1) # R에서 '.1' 과 '0.1' 은 같다.
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+	count(cyl)
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+	group_by(cyl) %>% 
+	sample_frac(.5)
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+	group_by(cyl) %>% 
+	sample_frac(.5) %>% 
+	count(cyl)
+```
+
+```{r eval = source_code_eval, echo = T}
+seq(nrow(airquality))
+```
+
+```{r eval = source_code_eval, echo = T}
+i <- sample(seq(nrow(airquality)), 20, replace = T)
+i
+```
+
+```{r eval = source_code_eval, echo = T}
+airquality[i, ]
+```
+
+```{r eval = source_code_eval, echo = T}
+# 복원추출을 허용하여 통해 정확히 100개의 샘플을 뽑는 경우
+mtcars %>% 
+	sample_n(100, replace = T) %>% 
+	as_tibble
+
+# 복원추출을 허용하여 원 데이터행수 보다 5배에 해당되는 160개 샘플을 뽑는 경우 
+mtcars %>% 
+	sample_frac(5, replace = T) %>% 
+	as_tibble
+```
+
+```{r eval = source_code_eval, echo = T}
+d = tibble(group = rep(c("A", "B", "C"), each = 100), v1 = rnorm(100 * 3))
+d
+```
+
+```{r eval = source_code_eval, echo = T}
+d2 <- d %>% 
+	mutate(v2 = case_when(group == "A" ~ round(v1),
+	                      group == "B" ~ abs(v1),
+	                      group == "C" ~ v1 + 10))
+d2
+```
+
+```{r eval = source_code_eval, echo = T}
+d2 %>% 
+	group_by(group) %>% 
+	sample_n(3)
+```
+
+## 상관관계{#statistic-2}
+
+### 공분산{#statistic-2-1}
+
+```{r eval = source_code_eval, echo = T}
+x <- c(1, 2, 3, 4, 5, 7, 9)
+y <- c(11, 17, 18, 37, 58, 80, 101)
+cov(x, y)
+```
+
+```{r eval = source_code_eval, echo = T}
+plot(x, y)
+```
+
+```{r eval = source_code_eval, echo = T}
+swiss %>% as_tibble
+```
+
+```{r eval = source_code_eval, echo = T}
+cov(swiss)
+```
+
+### 상관계수{#statistic-2-2}
+
+```{r eval = source_code_eval, echo = T}
+cor(swiss) %>% # 피어슨 상관계수를 계산
+  round(4)     # 소수 다섯번째 자리에서 반올림
+```
+
+#### 더 알아보기{-}
+
+```{r eval = source_code_eval, echo = T}
+cov(swiss) %>% 
+  cov2cor # cor(swiss) 과 결과가 같음
+```
+
+```{r eval = source_code_eval, echo = T}
+r <- cor(swiss)
+symnum(r) # 콘솔상에서 상관계수 행렬의 요약
+```
+
+```{r eval = source_code_eval, echo = T}
+corrplot::corrplot(r) 
+```
+
+```{r eval = source_code_eval, echo = T}
+panel.cor <- function(x, y, digits = 2, prefix = "", ...){
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- cor(x, y)
+  txt <- format(c(r, 0.123456789), digits = digits)[1]
+  txt <- paste0(prefix, txt)
+  cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex.cor * abs(r))
+}
+
+pairs(swiss, lower.panel = panel.smooth, upper.panel = panel.cor, gap = 0, row1attop = FALSE)
+```
+
+## 그룹간 차이비교{#statistic-3}
+
+```{r eval = source_code_eval, echo = T}
+sleep
+sleep %>% 
+	group_by(group) %>% 
+	summarize(avg_extra = mean(extra))
+```
+
+```{r eval = source_code_eval, echo = T}
+sleep2
+sleep2 %>% 
+    group_by(group) %>% 
+    summarize(avg_extra = mean(extra))
+```
+
+```{r eval = source_code_eval, echo = T}
+t.test(
+	c(0.7,-1.6,-0.2,-1.2,-0.1, 3.4, 3.7, 0.8, 0.0, 2.0),
+	c(1.9, 0.8, 1.1, 0.1,-0.1, 4.4, 5.5, 1.6, 4.6, 3.4),
+	paired = T
+)
+```
+
+```{r eval = source_code_eval, echo = T}
+t.test(
+	c(0.63, 0.9 , 0.72, 0.74, 0.75, 0.61, 0.45, 0.92, 0.570, 1.21),
+	c(1.91, 2.59, 2.36, 2.28, 2.94, 2.27, 2.59, 2.44, 2.48 , 1.44),
+	paired = T
+)
+```
+
+## 복잡한 수치연산 함수화 및 활용{#statistic-5}
+
+```{r eval = source_code_eval, echo = T}
+f1 <- function(x){
+	x ^ 2
+} # 중괄호 있는 기본골격
+
+f1 <- function(x) x ^ 2 # 중괄호 없음
+```
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+f1(2)
+f1(-10)
+```
+
+```{r eval = source_code_eval, echo = T}
+f1 <- function(x){
+	stopifnot(is.numeric(x)) # x 가 numeric 타입이 아닐 경우 코드실행이 멈추어짐
+	x ^ 2
+}
+```
+
+```{r eval = source_code_eval, echo = T}
+f1 <- function(x){
+	stopifnot(is.numeric(x)) 
+	return(x ^ 2)
+}
+```
+
+```{r eval = source_code_eval, echo = T}
+f2 <- function(x1, x2){
+	stopifnot(is.numeric(x1), is.numeric(x1)) # x1, x2 모두가 numeric 타입이 아닐경우 코드실행이 멈추어짐
+	x1 ^ x2
+}
+```
+
+```{r eval = source_code_eval, echo = T}
+f3 <- function(x, upper = F){
+	stopifnot(is.character(x))  # x 가 문자열이 아닐경우 코드실행이 멈추어짐
+	if(upper) toupper(x) else x # upper 가 TRUE 면 toupper(x) 실행. 그렇지 않으면 x 가 실행
+}
+```
+
+```{r eval = source_code_eval, echo = T}
+f3("Banana")
+```
+
+```{r eval = source_code_eval, echo = T}
+f3("Banana", T)
+```
+
+```{r eval = source_code_eval, echo = T}
+f4 <- function(x){
+	stopifnot(is.numeric(x)) # x 가 numeric 타입이 아닐경우 코드실행이 멈추어짐
+	N <- length(x)           # x 가 가지고 있는 값의 개수를 N 변수에 할당
+	sum_x <- sum(x)          # x 의 총합계를 sum_x 변수에 할당
+	mean_x <- sum_x / N      # x 의 총합계에서 개수를 나눔. 즉 x의 평균을 mean_x 에 할당
+	mean_x                   # mean_x 을 함수의 반환값으로 설정
+}
+```
+
+```{r eval = source_code_eval, echo = T}
+f5 <- function(){
+	"i am f5 function"
+}
+
+f6 <- function(){
+	"i am f6 function"
+}
+
+f7 <- function(){
+	"i am f7 function"
+}
+
+f8 <- function(){
+	"i am f8 function"
+}
+
+f9 <- function(){
+	"i am f9 function"
+}
+```
+
+```{r eval = source_code_eval, echo = T}
+source("f5_10.R") # source("script/03-statistic/f5_10.R")
+```
+
+```{r eval = source_code_eval, echo = T}
+source("f5_10.R")
+ls() # 전역환경에 있는 객체 리스트 업
+```
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+source("https://raw.githubusercontent.com/lovetoken/useful.lovetoken/master/R/adjust.R")
+
+x <- c(0, 4, 7, 9, 10)
+mmadjust(x, 1, 9) # x벡터의 range 를 강제하는 사용자 정의 함수이다.
+range01(x)        # x벡터의 range 가 0에서 1사이가 되도록 변형하는 사용자 정의 함수이다.
+```

@@ -1,0 +1,385 @@
+```{r echo = F, warning = F, message = F}
+pacman::p_load(arrow, bit64, corrplot, cowplot, cronR, data.table, DBI, DT, foreign, fst, ggplot2, jsonlite, knitr, lubridate, magrittr, maps, patchwork, plotly, RSQLite, scales, sessioninfo, tibble, tidyr, tidyverse)
+opts_chunk$set(fig.path = "output/figure/", fig.align = "center", out.width = "95%", warning = F, message = F)
+theme_set(theme_bw(base_family = "AppleGothic"))
+source_code_eval <- F
+```
+
+# 데이터를 통해 정제된 산출물 보여주기{#result}
+
+## 분석과정 중 분석가 입장에서 필요한 시각화와, 제 3자를 위한 시각화의 구분{#result-1}
+
+```{r eval = source_code_eval, echo = T}
+anscombe
+```
+
+## 이변량 변수 데이터의 현황 파악하기{#result-2}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mtcars, aes(wt, mpg))
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mtcars, aes(wt, mpg)) + geom_point()
+```
+
+```{r eval = source_code_eval, echo = T}
+p <- ggplot(mtcars, aes(wt, mpg))
+```
+
+```{r eval = source_code_eval, echo = T}
+p
+```
+
+```{r eval = source_code_eval, echo = T}
+p + geom_point() # ggplot(mtcars, aes(wt, mpg)) + geom_point() 
+```
+
+### `geom_point()` {#result-2-1}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mtcars, aes(wt, mpg)) + geom_point()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat, price)) + geom_point()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat, price)) + geom_point(alpha = .05)
+```
+
+### `geom_bar()` {#result-2-2}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mpg, aes(class)) + geom_bar()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mpg, aes(class, displ)) + geom_bar(stat = "identity")
+```
+
+```{r eval = source_code_eval, echo = T}
+mpg %>% 
+  group_by(class) %>% 
+  summarise(sum_displ = sum(displ))
+```
+
+### `geom_text()` {#result-2-3}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mtcars, aes(wt, mpg, label = rownames(mtcars))) + geom_text(check_overlap = T)
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mtcars, aes(wt, mpg, label = rownames(mtcars))) + geom_text(check_overlap = F)
+```
+
+### `geom_line()`, `geom_step()` {#result-2-4}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(economics, aes(date, unemploy)) + geom_line()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(economics[economics$date > as.Date("2013-01-01"), ], aes(date, unemploy)) + geom_step()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(economics[economics$date > as.Date("2013-01-01"), ], aes(date, unemploy)) + 
+  geom_line() + 
+  geom_point(size = 1)
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(economics[economics$date > as.Date("2013-01-01"), ], aes(date, unemploy)) + 
+  geom_line() + 
+  geom_bar(aes(date, pce), stat = "identity", alpha = .3) # 막대그래프가 추가되며 표현되는 데이터는 unemploy 변수가 아닌 pce 변수임
+```
+
+### `geom_rug()` {#result-2-5}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(economics[economics$date > as.Date("2013-01-01"), ], aes(date, unemploy)) + 
+  geom_line() + 
+  geom_rug()
+```
+
+### `geom_boxplot()` {#result-2-6}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mpg, aes(class, hwy)) + geom_boxplot()
+```
+
+### `geom_histogram()` {#result-2-7}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat)) + geom_histogram()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat)) + geom_histogram(bins = 50)
+```
+
+### `geom_bin2d()`, `geom_hex()` {#result-2-8}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat, price)) + geom_bin2d()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat, price)) + geom_hex()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat, price)) + geom_bin2d(bins = 10)
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat, price)) + geom_hex(bins = 10)
+```
+
+### `geom_blank()` {#result-2-9}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat, price)) + geom_blank()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat, price))
+```
+
+## 여러개의 시각화 배치하기{#result-4}
+
+### 그룹별로 겹쳐 그리기{#result-4-1}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(diamonds, aes(carat, price, color = clarity)) + 
+  geom_point(alpha = .05)
+```
+
+```{r eval = source_code_eval, echo = T}
+economics
+```
+
+```{r eval = source_code_eval, echo = T}
+economics %>% 
+  pivot_longer(-date, names_to = "type")
+```
+
+```{r eval = source_code_eval, echo = T}
+economics %>% 
+  pivot_longer(-date, names_to = "type") %>% 
+  ggplot(aes(date, value, group = type)) + 
+  geom_line() + 
+  scale_y_continuous(trans = 'log2') # y축을 로그스케일링 한다.
+```
+
+```{r eval = source_code_eval, echo = T}
+economics %>% 
+  pivot_longer(-date, names_to = "type") %>% 
+  ggplot(aes(date, value, group = type, color = type)) + 
+  geom_line() + 
+  scale_y_continuous(trans = 'log2') # y축을 로그스케일링 한다.
+```
+
+```{r eval = source_code_eval, echo = T}
+economics %>% 
+  pivot_longer(-date, names_to = "type") %>% 
+  ggplot(aes(date, value)) + 
+  geom_line() + 
+  scale_y_continuous(trans = 'log2')
+```
+
+#### 더 알아보기{-}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mtcars, aes(wt, mpg, linetype = cyl)) + 
+  geom_point() # 점을 표현하는 기하함수에서 linetype 미적인자를 입력하였을 경우
+```
+
+### `facet_grid()`, `facet_wrap()`{#result-4-2}
+
+```{r eval = source_code_eval, echo = T}
+sub_txhousing <- txhousing %>% 
+  filter(city %in% c("San Marcos", "Paris", "Abilene", "Sherman-Denison", "NE Tarrant County", "Lufkin", "Bay Area", "Texarkana", "Tyler"))
+
+p_tx <- ggplot(sub_txhousing, aes(sales, volume, color = city)) + 
+  geom_point()
+
+p_tx
+```
+
+```{r eval = source_code_eval, echo = T}
+p_tx + 
+  facet_grid(city ~ .)
+```
+
+```{r eval = source_code_eval, echo = T}
+p_tx + 
+  facet_grid(. ~ city)
+```
+
+```{r eval = source_code_eval, echo = T}
+p_tx + 
+  facet_wrap(city ~ .)
+```
+
+### patchwork 패키지의 활용{#result-4-3}
+
+```{r eval = source_code_eval, echo = T}
+p1 <- ggplot(mtcars, aes(wt, mpg)) + geom_point()
+p2 <- ggplot(mpg, aes(cyl, hwy)) + geom_bar(stat = "identity")
+p3 <- ggplot(mpg, aes(cyl, hwy)) + geom_jitter(alpha = .3)
+p4 <- ggplot(mtcars, aes(wt, mpg, label = rownames(mtcars))) + geom_text(check_overlap = T)
+```
+
+```{r eval = source_code_eval, echo = T}
+library(patchwork)
+```
+
+```{r eval = source_code_eval, echo = T}
+p1 + p2
+```
+
+```{r eval = source_code_eval, echo = T}
+p1 / p2
+```
+
+```{r eval = source_code_eval, echo = T}
+(p1 + p2) / (p3 + p4)
+```
+
+## 그래프의 세부조정과 부연설명 추가하기{#result-6}
+
+```{r eval = source_code_eval, echo = T}
+p1 <- ggplot(mtcars, aes(wt, mpg)) + geom_point()
+p1
+```
+
+### `ggtitle()`{#result-6-1}
+
+```{r eval = source_code_eval, echo = T}
+p1 + ggtitle("Scatter plot", subtitle = "wt ~ mpg")
+```
+
+### `labs()`{#result-6-2}
+
+```{r eval = source_code_eval, echo = T}
+p1 + labs(title = "Scatter plot", subtitle = "X axis : wt / Y axis : mpg", x = "", y = "")
+```
+
+```{r eval = source_code_eval, echo = T}
+p51 <- ggplot(mtcars, aes(wt, mpg, color = cyl)) + geom_point() 
+p52 <- ggplot(mtcars, aes(wt, mpg, color = cyl)) + geom_point() + labs(color = "Number of \ncylinders")
+
+p51 + p52 # patchwork 패키지 로드 필요
+```
+
+```{r eval = source_code_eval, echo = T}
+p51 + labs(color = NULL)
+```
+
+### 테마 세트 이용하기{#result-6-3}
+
+```{r eval = source_code_eval, echo = T}
+p11 <- p1 + theme_bw()       + ggtitle("theme_bw")
+p12 <- p1 + theme_classic()  + ggtitle("theme_classic")
+p13 <- p1 + theme_dark()     + ggtitle("theme_dark")
+p14 <- p1 + theme_minimal()  + ggtitle("theme_minimal")
+p15 <- p1 + theme_gray()     + ggtitle("theme_gray")
+p16 <- p1 + theme_grey()     + ggtitle("theme_grey")
+p17 <- p1 + theme_light()    + ggtitle("theme_light")
+p18 <- p1 + theme_linedraw() + ggtitle("theme_linedraw")
+p19 <- p1 + theme_void()     + ggtitle("theme_void")
+
+(p11 + p12 + p13) / (p14 + p15 + p16) / (p17 + p18 + p19) # patchwork 패키지 로드 필요
+```
+
+### 축 범위 조정{#result-6-4}
+
+```{r eval = source_code_eval, echo = T}
+p1 + lims(y = c(0, 100))
+```
+
+```{r eval = source_code_eval, echo = T}
+p1 + lims(y = c(0, 100), x = c(0, 10))
+```
+
+### x축과 y축 바꾸기{#result-6-5}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mtcars, aes(x = mpg, y = wt)) + geom_point()
+```
+
+```{r eval = source_code_eval, echo = T}
+p1 + coord_flip()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mpg, aes(model, cty)) + 
+  geom_boxplot()
+```
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mpg, aes(model, cty)) + 
+  geom_boxplot() + 
+  coord_flip()
+```
+
+#### 더 알아보기{-}
+
+```{r eval = source_code_eval, echo = T}
+ggplot(mpg, aes(reorder(model, cty), cty)) + 
+  geom_boxplot() + 
+  coord_flip()
+```
+
+## 살아있는 데이터 변화에 대응하기 위한 수정가능한 산출물{#result-3}
+
+### DT 패키지{#result-3-1}
+
+```{r eval = source_code_eval, echo = T}
+library(DT)
+mtcars %>% datatable
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+	datatable(extensions = "Buttons", options = list(dom = "BFrtip", buttons = c("copy", "csv", "excel", "pdf")))
+```
+
+### plotly 패키지{#result-3-2}
+
+```{r eval = source_code_eval, echo = T}
+library(plotly)
+p <- ggplot(mtcars, aes(mpg, hp)) + 
+	geom_point()
+
+ggplotly(p)
+```
+
+### googlesheets4 패키지{#result-3-3}
+
+```{r eval = source_code_eval, echo = T}
+library(googlesheets4)
+gapminder <- read_sheet("https://docs.google.com/spreadsheets/d/1U6Cf_qEOhiR9AZqTqS3mbMF3zt2db48ZP5v3rkrAEJY/edit#gid=780868077")
+```
+
+```{r eval = source_code_eval, echo = T}
+gapminder
+```
+
+## R Markdown 을 이용한 데이터 분석 문서 만들기{#result-5}
+
+```{r eval = source_code_eval, echo = T}
+names(knitr::knit_engines$get())
+```
+
+```{r eval = source_code_eval, echo = T}
+library(DBI)
+con <- dbConnect(SQLite(), "data/ex.sqlite") # con <- dbConnect(SQLite(), "data/02-transform/1-3/data/ex.sqlite")
+dbListTables(con) # DB 에 있는 테이블 전체를 출력한다.
+```
+
+### 더 알아보기{-}

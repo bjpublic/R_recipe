@@ -1,0 +1,900 @@
+```{r echo = F, warning = F, message = F}
+pacman::p_load(arrow, bit64, corrplot, cowplot, cronR, data.table, DBI, DT, foreign, fst, ggplot2, jsonlite, knitr, lubridate, magrittr, patchwork, plotly, RSQLite, scales, sessioninfo, tibble, tidyr, tidyverse)
+opts_chunk$set(fig.path = "output/figure/", fig.align = "center", out.width = "95%", warning = F, message = F)
+theme_set(theme_bw(base_family = "AppleGothic"))
+options(sciepn = 100)
+source_code_eval <- F
+```
+
+# 데이터 가공 예제{#transform}
+
+```{r eval = source_code_eval, echo = T}
+library(tidyverse)
+```
+
+## 데이터를 읽는 방법{#transform-1}
+
+```{r eval = source_code_eval, echo = T}
+sleep
+```
+
+### 텍스트 형태의 파일을 읽어들이기{#transform-1-1}
+
+```{r eval = source_code_eval, echo = T}
+readLines("datebook.txt") # readLines("data/02-transform/1-1/datebook.txt")
+```
+
+```{r eval = source_code_eval, echo = T}
+readLines("sleep.csv") # readLines("data/02-transform/1/sleep.csv")
+```
+
+```{r eval = source_code_eval, echo = T}
+read_csv("sleep.csv") # read_csv("data/02-transform/1/sleep.csv")
+```
+
+```{r eval = source_code_eval, echo = T}
+read_delim("sleep.csv", delim = ",") # read_delim("data/02-transform/1/sleep.csv", delim = ",")
+```
+
+```{r eval = source_code_eval, echo = T}
+read_delim("sleep.tsv", delim = "\t") # read_delim("data/02-transform/1/sleep.tsv", delim = "\t")
+```
+
+#### 더 알아보기{-}
+
+### 외부파일 읽어들이기{#transform-1-2}
+
+```{r eval = source_code_eval, echo = T}
+library(foreign)
+```
+
+foreign 패키지를 로드하고
+
+```{r eval = source_code_eval, echo = T}
+read.spss("staffsurvey.sav") # read.spss("data/02-transform/1-2/staffsurvey.sav")
+```
+
+```{r eval = source_code_eval, echo = T}
+read.spss("staffsurvey.sav", to.data.frame = T) # read.spss("data/02-transform/1-2/staffsurvey.sav", to.data.frame = T)
+```
+
+```{r eval = source_code_eval, echo = T}
+library(jsonlite)
+```
+
+```{r eval = source_code_eval, echo = T}
+read_json("sleep.json") # read_json("data/02-transform/1/sleep.json")
+```
+
+```{r eval = source_code_eval, echo = T}
+read_json("sleep.json", simplifyVector = T) # read_json("data/02-transform/1/sleep.json", simplifyVector = T)
+```
+
+```{r eval = source_code_eval, echo = T}
+library(arrow)
+```
+
+```{r eval = source_code_eval, echo = T}
+read_parquet("sleep.parquet") # read_parquet("data/02-transform/1/sleep.parquet")
+```
+
+#### 더 알아보기{-}
+
+### DB 에 있는 데이터 읽기{#transform-1-3}
+
+```{r eval = source_code_eval, echo = T}
+install.packages("RSQLite") # CRAN 을 통해 RSQLite 패키지를 설치
+library(RSQLite)
+```
+ 
+```{r eval = source_code_eval, echo = T}
+install.packages("DBI") # DBI 패키지 설치
+library(DBI)
+```
+
+```{r eval = source_code_eval, echo = T}
+dir.create("data")
+```
+
+```{r eval = source_code_eval, echo = T}
+con <- dbConnect(SQLite(), "data/ex.sqlite") # con <- dbConnect(SQLite(), "data/02-transform/1-3/data/ex.sqlite")
+```
+
+```{r eval = source_code_eval, echo = T}
+library(stringi) # 랜덤문자열을 생성시키는 stri_rand_strings() 함수 이용을 위한 stringi 패키지 로드
+
+n <- 100000
+d <- tibble(
+  id = stri_rand_strings(n, 12), 
+  col1 = rnorm(n), 
+  col2 = runif(n)
+)
+d
+```
+
+```{r eval = source_code_eval, echo = T}
+dbWriteTable(con, "foo", d)
+```
+
+```{r eval = source_code_eval, echo = T}
+d_from_db <- dbReadTable(con, "foo") %>% as_tibble
+```
+
+```{r eval = source_code_eval, echo = T}
+d
+d_from_db
+```
+
+```{r eval = source_code_eval, echo = T}
+all.equal(d, d_from_db)
+```
+
+```{r eval = source_code_eval, echo = T}
+dbSendQuery(con, "
+  SELECT * FROM foo WHERE col1 < 0 AND col2 > 0
+")
+```
+
+```{r eval = source_code_eval, echo = T}
+dbSendQuery(con, "
+  SELECT * FROM foo WHERE col1 < 0 AND col2 > 0
+") %>% 
+	dbFetch %>% as_tibble
+```
+
+```{r eval = source_code_eval, echo = T}
+tbl(con, "foo")
+```
+
+```{r eval = source_code_eval, echo = T}
+tbl(con, "foo") %>% 
+  filter(col1 < 0, col2 > 0)
+```
+
+```{r eval = source_code_eval, echo = T}
+tbl(con, "foo") %>% 
+  filter(col1 < 0, col2 > 0) %>% 
+  group_by(col2_group = col2 > .5) %>% 
+  summarise(N = n(), avg_col1 = mean(col1), avg_col2 = mean(col2)) %>% 
+  mutate(col2_group = case_when(col2_group == 1 ~ "col2 >  0.5",
+                                col2_group == 0 ~ "col2 <= 0.5")) %>% 
+  arrange(desc(N))
+```
+
+```{r eval = source_code_eval, echo = T}
+tbl(con, "foo") %>% 
+  filter(col1 < 0, col2 > 0) %>% 
+  group_by(col2_group = col2 > .5) %>% 
+  summarise(N = n(), avg_col1 = mean(col1), avg_col2 = mean(col2)) %>% 
+  mutate(col2_group = case_when(col2_group == 1 ~ "col2 >  0.5",
+                                col2_group == 0 ~ "col2 <= 0.5")) %>% 
+  arrange(desc(N)) %>% 
+  show_query
+```
+
+```{r eval = source_code_eval, echo = T}
+res <- tbl(con, "foo") %>% 
+  filter(col1 < 0, col2 > 0) %>% 
+  group_by(col2_group = col2 > .5) %>% 
+  summarise(N = n(), avg_col1 = mean(col1), avg_col2 = mean(col2)) %>% 
+  mutate(col2_group = case_when(col2_group == 1 ~ "col2 >  0.5",
+                                col2_group == 0 ~ "col2 <= 0.5")) %>% 
+  arrange(desc(N)) %>% 
+  collect
+
+res
+```
+
+## 데이터 전처리 요령{#transform-2}
+
+### 내용을 집약하기{#transform-2-1}
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+	as_tibble # 일반 데이터프레임인 mtcars 를 간략하게 확인하기 위한 tibble 형변환 
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+	summarize(avg_hp = mean(hp))
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+	summarize(
+	  min(hp),    # 최소값
+	  median(hp), # 중앙값
+	  mean(hp),   # 평균값
+	  max(hp)     # 최대값
+	)
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+	summarize(
+	  n(), # mtcars 데이터프레임의 행수이다.
+	  sum(hp), # hp 의 총계이다.
+	  sum(hp) / n(), # hp 의 총계에 mtcars 의 행수 32를 나눈값이 계산된다. 이것은 hp 의 평균이다.
+	  mean(hp), # hp 의 평균이다. sum(hp) / n() 로 계산된 값과 동일하다.
+	  n_distinct(cyl), # cyl 의 고유개수를 확인한다.
+	  first(wt), # wt 의 첫번째 값이다.
+	  nth(wt, 5), # wt 의 다섯번째 값이다.
+	  last(wt), # wt 의 마지막 값이다.
+	  sd(hp), # hp 의 표준편차이다.
+	  var(hp), # hp 의 분산이다.
+	  mad(drat), # drat 의 중앙값 절대 편차 이다.
+	  quantile(qsec, 3/4), # qsec 의 제3사분위수이다.
+	  quantile(qsec, 1/4), # qsec 의 제1사분위수이다.
+	  quantile(qsec, 3/4) - quantile(qsec, 1/4), # qsec 의 제3사분위수와 제1사분위수의 차를 계산한 값이다. 이는 qsec 의 사분범위이다.
+	  IQR(qsec) # qsec 의 사분범위를 IQR() 함수로 확인한 것이다.
+	)
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+	summarize(
+	  mean(mpg),              # mpg 의 평균값이 'mean(mpg)' 이름인 열에 배치된다.
+	  average_mpg = mean(mpg) # 따로 명명한 'average_mpg' 이름인 열에 배치된다.
+	)
+```
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+mtcars %>% 
+	summarize(average_mpg = mean(mpg))
+
+mtcars %>% 
+	summarise(average_mpg = mean(mpg)) # summarize() 와 같다
+```
+
+```{r eval = source_code_eval, echo = T}
+mean_absolute_deviation <- function(x){
+  sum(abs(x - mean(x)))/length(x)
+}
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+  summarise(res = mean_absolute_deviation(hp))
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars %>% 
+  summarise(res = sum(abs(hp - mean(hp))) / length(hp))
+```
+
+#### 더 알아보기{-}
+
+### 새로운 열 만들기{#transform-2-2}
+
+```{r eval = source_code_eval, echo = T}
+cars %>% 
+  head(10) %>% # 맨 앞의 10개 데이터만 예제로 이용
+  mutate(ratio = dist/speed)
+```
+
+```{r eval = source_code_eval, echo = T}
+cars %>% 
+  head(10) %>% 
+  mutate(ratio = dist/speed, round_ratio = round(ratio, 1))
+```
+
+```{r eval = source_code_eval, echo = T}
+cars %>% 
+  head(10) %>% 
+  mutate(
+    sum_speed = sum(speed),
+    mean_dist = mean(dist)     
+  )
+```
+
+```{r eval = source_code_eval, echo = T}
+cars %>% 
+  head(10) %>% 
+  mutate(dist = dist * 10)
+```
+
+```{r eval = source_code_eval, echo = T}
+cars %>% 
+  head(10) %>% 
+  mutate(
+    log(speed), # speed 값의 로그변환 값이다.
+    lead(dist), # dist 의 뒤의 행값을 가져옴으로써, 결과적으로 기존 dist 에 비해 앞선 값이다.
+    lag(dist, 2), # dist 의 두번째 앞의 행값을 가져옴으로써, 결과적으로 기존 dist 에 비해 늦은 값이다.
+    row_number(dist), # dist 를 기준으로 한 순위이다.
+    dense_rank(dist), # dist 를 기준으로 한 순위이다. 단 동순위는 같은 순위값으로 매겨진다.
+    ntile(dist, 4), # 4등분 순위이다.
+    cumsum(dist), # dist 의 행 순서의 누적합계 값이다.
+    if_else(dist <= 10, "[0, 10]", "(10, 120]"), # dist 가 10 이하인지 아닌지에 따라서 "[0, 10]" 와 "(10, 120]" 로 변환된 값이다.
+    ratio = speed/dist, # speed 를 idst 로 나눈 값이다.
+    score = case_when(
+      speed/dist >= 0 & speed/dist < 1 ~ "A", 
+      speed/dist >= 1 & speed/dist < 2 ~ "B",
+      speed/dist >= 2 & speed/dist < 3 ~ "C"
+      ), # 앞서 계산한 ratio 가 1미만이면 A, 1이상 2미만이면 B, 2이상 3미만이면 C 이다.
+    cut(dist, 3) # dist 를 동일 범위로 3등분 한 후, 구간에 따른 라벨링 요인(factor)값이 매칭된다. 
+  )
+```
+
+```{r eval = source_code_eval, echo = T}
+cars %>% 
+  head(10) %>% 
+  mutate(
+		temp = NA,
+		a = "a",
+		names = letters[1:10], # letters 는 알파벳 26개가 순서대로 준비된 벡터로 R의 빌트인 객체이다.
+		NAMES = LETTERS[1:10]  # letters 와 비슷하게 LETTERS 도 있다.
+	)
+```
+
+### 선택하여 일부만 추출하기{#transform-2-3}
+
+#### 열단위로 추출하기{#transform-2-3-1}
+
+```{r eval = source_code_eval, echo = T}
+sleep # extra, group, ID 3개의 열이 있는 데이터프레임
+sleep %>% 
+	select(extra) # extra 열 하나만을 선택 
+```
+
+```{r eval = source_code_eval, echo = T}
+sleep %>% 
+	select("extra")
+```
+
+```{r eval = source_code_eval, echo = T}
+sleep %>% 
+	select(extra, ID) # 입력 순서대로 열이 선택된다.
+sleep %>% 
+	select(1, 3) # 열 index 를 입력하는 방식 물론 가능하다.
+sleep %>% 
+	select(ID, group, extra) # 따라서 데이터프레임의 열 순서를 임의로 바꾸고 싶을 경우 이처럼 select() 를 이용해도 된다.
+```
+
+```{r eval = source_code_eval, echo = T}
+sleep %>% 
+	select(-group) # group 열을 제외한 나머지 열이 선택된다.
+``` 
+
+```{r eval = source_code_eval, echo = T}
+library(tidyr) # tidyr 패키지의 내장되어 있는 `world_bank_pop` 예제 데이터셋 호출을 위함
+world_bank_pop
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop %>% 
+	select(starts_with("201"))
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop %>% 
+	select(ends_with("5"))
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop %>% 
+	select(contains("01"))
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop %>% 
+	select(matches("\\D")) # 숫자가 포함되지 않는 정규식을 이용한 년도열을 배제한 예제이다.
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop %>% 
+	select(country, indicator, "2017", "2000", "2001", "2002", "2003", "2004", "2005", "2006", "2007", "2008", "2009", "2010", "2011", "2012", "2013", "2014", "2015", "2016")
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop %>% 
+	select(country, indicator, "2017", everything())
+```
+
+#### 행단위로 추출하기{#transform-2-3-2}
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop %>% 
+	filter(country == "ABW") # country 값이 "ABW" 와 같은지 아닌지를 확인하는 등위연산자는 내부적으로 논리값이 도출된다.
+```
+
+### 그룹별 적용하기{#transform-2-4}
+
+```{r eval = source_code_eval, echo = T}
+library(dplyr) # dplyr::status 데이터셋을 이용하기 위해 dplyr 패키지를 앞서 로드한다.
+storms %>% 
+  select(status) %>% 
+  distinct # unique() 함수를 이용해도 된다.
+```
+
+```{r eval = source_code_eval, echo = T}
+storms %>% 
+	group_by(status)
+```
+
+```{r eval = source_code_eval, echo = T}
+storms %>% 
+  group_by(status) %>% 
+  slice(1:3)
+```
+
+```{r eval = source_code_eval, echo = T}
+storms %>% 
+  slice(1:3)
+```
+
+#### 더 알아보기{-}
+
+```{r eval = source_code_eval, echo = T}
+storms %>% 
+	group_by(year, month) %>% 
+	summarize(avg_pressure = mean(pressure))
+```
+
+```{r eval = source_code_eval, echo = T}
+storms %>% 
+	group_by(year, month) %>% 
+	summarize(avg_pressure = mean(pressure)) %>% 
+	group_by(month) %>% # 그룹요인을 year 에서 month 로 변경
+	summarize(max_avg_pressure = max(avg_pressure))
+```
+
+```{r eval = source_code_eval, echo = T}
+storms %>% 
+	group_by(year, month) %>% 
+	summarize(avg_pressure = mean(pressure)) %>% 
+	ungroup
+```
+
+### 복수개의 테이블 결합하기{#transform-2-5}
+
+#### 같은 열 내용이 담긴 복수개의 테이블을 결합하기{#transform-2-5-1}
+
+```{r eval = source_code_eval, echo = T}
+a <- tibble(id = c(1, 2), name = c("a", "b"))
+b <- tibble(id = c(3, 4), name = c("c", "d"))
+c <- tibble(id = c(5, 6), name = c("e", "f"))
+```
+
+```{r eval = source_code_eval, echo = T}
+a
+b
+c
+```
+
+```{r eval = source_code_eval, echo = T}
+bind_rows(a, b, c)
+```
+
+```{r eval = source_code_eval, echo = T}
+rbind(a, b, c)
+```
+
+```{r eval = source_code_eval, echo = T}
+bind_rows(a, b, c)
+```
+
+```{r eval = source_code_eval, echo = T}
+b <- tibble(id = c(3, 4), name = c("c", "d"), address = c("16463", "16312"))
+```
+
+```{r eval = source_code_eval, echo = T}
+b
+```
+
+```{r eval = source_code_eval, echo = T}
+rbind(a, b, c)
+```
+
+```{r eval = source_code_eval, echo = T}
+bind_rows(a, b, c)
+```
+
+```{r eval = source_code_eval, echo = T}
+b <- tibble(id = c("3", "4"), name = c("c", "d"))
+```
+
+```{r eval = source_code_eval, echo = T}
+b
+```
+
+```{r eval = source_code_eval, echo = T}
+rbind(a, b, c)
+```
+
+```{r eval = source_code_eval, echo = T}
+bind_rows(a, b, c)
+```
+
+#### 다량의 테이블을 결합하기{#transform-2-5-2}
+
+```{r eval = source_code_eval, echo = T}
+list.files("data/02-transform/2-5-2")
+```
+
+```{r eval = source_code_eval, echo = T}
+d <- list.files("data/02-transform/2-5-2") %>% 
+	map(function(x) read_csv(paste0("data/02-transform/2-5-2/", x))) %>% 
+	bind_rows
+d
+```
+
+## 시계열 데이터 가공을 위한 요령 (lubridate 패키지와 함께){#transform-3}
+
+### Date 클래스 객체 만들기{#transform-3-1}
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+as.Date("2011-06-04")
+as.Date("2011-6-4")
+as.Date("2011/06/04")
+```
+
+```{r eval = source_code_eval, echo = T}
+as.Date("20110604")
+```
+
+```{r eval = source_code_eval, echo = T}
+as.Date("06-04-2011")
+```
+
+```{r eval = source_code_eval, echo = T}
+ymd("2011/06/04")
+```
+
+```{r eval = source_code_eval, echo = T}
+mdy("06/04/2011")
+```
+
+```{r eval = source_code_eval, echo = T}
+dmy("04/06/2011")
+```
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+ymd("2011/06/04")
+ymd("2011-06-04")
+ymd("20110604")
+ymd("110604")
+ymd("11.06.04")
+ymd("11,06,04")
+
+# 심지어 아래의 문자열도 파싱을 정상적으로 해낸다
+ymd("11_06.04") 
+ymd("2011  06  04")
+ymd("2011!?06??!04")
+ymd("2011 =06??04")
+ymd("11 No 06 way 04")
+```
+
+```{r eval = source_code_eval, echo = T}
+as.Date("2011-06-04 13:30:50") # 시각정보가 유실
+```
+
+```{r eval = source_code_eval, echo = T}
+as.POSIXct("2011-06-04 13:30:50")
+```
+
+```{r eval = source_code_eval, echo = T}
+ymd_hms("2011-06-04 13:30:50")
+```
+
+```{r eval = source_code_eval, echo = T}
+ymd_h("2011-06-04 13")
+```
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+as.POSIXct("2011-06-04 13") # No
+as.POSIXct("2011-06-04 13:00:00") # Yes
+```
+
+### 부분정보 추출 {#transform-3-3}
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+ld1 <- ymd_hms("2011-06-04 13:30:50")
+
+year(ld1)
+month(ld1)
+day(ld1)
+wday(ld1)
+yday(ld1)
+hour(ld1)
+minute(ld1)
+second(ld1)
+```
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+month(ld1, label = T)
+wday(ld1, label = T)
+```
+
+### 부분정보 수정{#transform-3-4}
+
+```{r eval = source_code_eval, echo = T}
+hour(ld1) <- 10
+ld1
+```
+
+```{r eval = source_code_eval, echo = T}
+ld1 <- update(ld1, hour = 13)
+ld1
+```
+
+```{r eval = source_code_eval, echo = T}
+ld1$hour
+```
+
+```{r eval = source_code_eval, echo = T}
+ld2 <- as.POSIXlt(ld1)
+ld2$hour <- 10
+ld2
+```
+
+### 날짜 시각에 대한 산술연산{#transform-3-5}
+
+```{r eval = source_code_eval, echo = T}
+ymd("2016-01-30") + days(2)
+```
+
+```{r eval = source_code_eval, echo = T}
+ymd("2016-01-30") - days(1:30)
+```
+
+```{r eval = source_code_eval, echo = T}
+ymd("2013-01-31") + months(0:11)
+```
+
+### lubridate 와 dplyr 간의 조합{#transform-3-6}
+
+```{r eval = source_code_eval, echo = T}
+library(dplyr)
+data(lakers)
+
+lakers <- lakers %>% as_tibble
+lakers
+```
+
+```{r eval = source_code_eval, echo = T}
+lakers %>% select(date, time)
+```
+
+```{r eval = source_code_eval, echo = T}
+lakers <- lakers %>% 
+	mutate(date = paste(date, time) %>% ymd_hm) %>% 
+	rename(time_index = date) %>% 
+	select(-time)
+
+lakers
+```
+
+#### 그룹 별 연산{#transform-3-6-1}
+  
+```{r eval = source_code_eval, echo = T}
+lakers %>% 
+	group_by(month(time_index)) %>% 
+	summarize(mean_x = mean(x, na.rm = T), mean_y = mean(y, na.rm = T))
+```
+
+```{r eval = source_code_eval, echo = T}
+lakers %>% 
+	group_by(year(time_index)) %>% 
+	summarize(mean_x = mean(x, na.rm = T), mean_y = mean(y, na.rm = T))
+```
+
+#### Filter{#transform-3-6-2}
+
+```{r eval = source_code_eval, echo = T}
+lakers %>% 
+	filter(time_index <= ymd_hms("2008-10-28 12:00:00"))
+```
+
+```{r eval = source_code_eval, echo = T}
+lakers %>% 
+	filter(time_index >= ymd_hms("2008-10-28 12:00:00"), time_index <= ymd_hms("2009-03-09 00:33:00"))
+```
+
+```{r eval = source_code_eval, echo = T}
+inter_range <- interval(ymd_hms("2008-10-28 12:00:00"), ymd_hms("2009-03-09 00:33:00"))
+lakers %>% 
+	filter(time_index %within% inter_range)
+```
+
+```{r eval = source_code_eval, echo = T}
+inter_range <- ymd_hms("2008-10-28 12:00:00") %--% ymd_hms("2009-03-09 00:33:00")
+lakers %>% 
+	filter(time_index %within% inter_range)
+```
+
+### 간편 기능 함수들{#transform-3-7}
+
+#### Timezone 인자를 받을 수 있는 `now()`{#transform-3-7-1}
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+now()
+Sys.time()
+```
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+now("America/New_York")
+now("Japan")
+```
+
+#### 오전인가 오후인가? : `am()`, `pm()`{#transform-3-7-2}
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+now()
+hour(now()) >= 12
+```
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+am(now()) # 지금 시각이 오전?
+pm(now()) # 지금 시각이 오후?
+```
+
+#### 시각에 대한 올림, 내림, 반올림{#transform-3-7-3}
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+ld1
+
+round_date(ld1, "hour") # 시간 단위 반올림
+round_date(ld1, "day") # 일 단위 반올림
+
+floor_date(ld1, "hour") # 시간 단위 내림
+floor_date(ld1, "day") # 일 단위 내림
+
+ceiling_date(ld1, "hour") # 시간 단위 올림
+ceiling_date(ld1, "day") # 일 단위 올림
+```
+
+## 전처리 과정에서 일어날 수 있는 여러가지 일들{#transform-5}
+
+### 데이터 형 변환{#transform-5-1}
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+as.character(1)
+as(1, "character")
+```
+
+```{r eval = source_code_eval, echo = T}
+as(1, "character") %>% class
+```
+
+```{r eval = source_code_eval, echo = T}
+d <- tibble(v1 = 1:5)
+
+d
+d %>% 
+	mutate(v1 = as(v1, "character"))
+```
+
+### Bigint 타입의 데이터 처리 interger64{#transform-5-2}
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+d <- 2^31
+d
+class(d)
+```
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+as.integer(d - 1)
+as.integer(d)
+```
+
+```{r eval = source_code_eval, echo = T}
+as.integer64(d)
+```
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+object.size(3L)
+object.size(as.integer64(3L))
+```
+
+### 데이터프레임을 피벗(pivot) 하기{#transform-5-3}
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop %>% 
+  pivot_longer(-c(country, indicator), names_to = "year")
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop %>% 
+  mutate(
+    '2000' = log(`2000`),
+    '2001' = log(`2001`),
+    '2002' = log(`2002`),
+    '2003' = log(`2003`),
+    '2004' = log(`2004`),
+    '2005' = log(`2005`),
+    '2006' = log(`2006`),
+    '2007' = log(`2007`),
+    '2008' = log(`2008`),
+    '2009' = log(`2009`),
+    '2010' = log(`2010`),
+    '2011' = log(`2011`),
+    '2012' = log(`2012`),
+    '2013' = log(`2013`),
+    '2014' = log(`2014`),
+    '2015' = log(`2015`),
+    '2016' = log(`2016`),
+    '2017' = log(`2017`)
+  )
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop %>% 
+  pivot_longer(-c(country, indicator), names_to = "year") %>% 
+  mutate(value = log(value))
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop2 <- world_bank_pop %>% 
+  pivot_longer(-c(country, indicator), names_to = "year") %>% 
+  mutate(value = log(value))
+
+world_bank_pop2
+```
+
+```{r eval = source_code_eval, echo = T}
+world_bank_pop2 %>% 
+  pivot_wider(c(country, indicator), names_from = year)
+```
+
+#### 더 알아보기{-}
+
+```{r eval = source_code_eval, echo = T}
+vignette("pivot")
+```
+
+### 가능한 모든 요인 조합 데이터프레임 만들기{#transform-5-4}
+
+```{r eval = source_code_eval, echo = T}
+bread_beverage <- tibble(
+	id = LETTERS[1:10], 
+	bread = c("baguette", "cheese", "scone", "baguette", "cheese", "scone", "baguette", "scone", "scone", "cheese"),
+	beverage = c("coffee", "milk", "coffee", "milk", "milk", "coffee", "coffee", "coffee", "coffee", "coffee"))
+bread_beverage
+```
+
+```{r eval = source_code_eval, echo = T}
+bread_beverage %>% 
+	count(bread, beverage, sort = T)
+```
+
+```{r eval = source_code_eval, echo = T}
+bread_beverage %>% 
+	count(bread, beverage) %>% 
+	complete(bread, beverage) %>% 
+	arrange(desc(n))
+```
+
+```{r eval = source_code_eval, echo = T}
+grid <- bread_beverage %>% 
+	expand(bread, beverage)
+grid
+```
+
+```{r eval = source_code_eval, echo = T}
+bread_beverage %>% 
+	count(bread, beverage) %>% 
+	right_join(grid)
+```
+
+#### 더 알아보기{-}
+
+```{r eval = source_code_eval, echo = T}
+bread_beverage %>% 
+	count(bread, beverage) %>% 
+	complete(bread, beverage)
+```
+
+```{r eval = source_code_eval, echo = T}
+expand.grid(
+	bread = c("baguette", "cheese", "scone"), 
+	beverage = c("coffee", "milk")
+)
+```

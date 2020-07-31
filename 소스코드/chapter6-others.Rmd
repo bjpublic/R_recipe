@@ -1,0 +1,213 @@
+```{r echo = F, warning = F, message = F}
+pacman::p_load(arrow, bit64, corrplot, cowplot, cronR, data.table, DBI, DT, foreign, fst, ggplot2, jsonlite, knitr, lubridate, magrittr, patchwork, plotly, RSQLite, scales, sessioninfo, tibble, tidyr, tidyverse)
+opts_chunk$set(fig.path = "output/figure/", fig.align = "center", out.width = "95%", warning = F, message = F)
+theme_set(theme_bw(base_family = "AppleGothic"))
+source_code_eval <- F
+```
+
+# 또 다른 차원의 R 활용예제{#others}
+
+## ETL (Extract, Transform, Load){#others-3}
+
+```{r eval = source_code_eval, echo = T}
+sample(0:9, 1)
+```
+
+```{r eval = source_code_eval, echo = T}
+sample(0:9, 1) %>% 
+  switch(
+    "0" = "Zero",     
+    "1" = "One",
+    "2" = "Two",
+    "3" = "Three",
+    "4" = "Four",
+    "5" = "Five",
+    "6" = "Six",
+    "7" = "Seven",
+    "8" = "Eight",
+    "9" = "Nine"
+  )
+```
+
+```{r eval = source_code_eval, echo = T}
+tibble(
+  lucky_number = sample(0:9, 1) %>% 
+	  switch(
+	    "0" = "Zero",
+	    "1" = "One",
+	    "2" = "Two",
+	    "3" = "Three",
+	    "4" = "Four",
+	    "5" = "Five",
+	    "6" = "Six",
+	    "7" = "Seven",
+	    "8" = "Eight",
+	    "9" = "Nine"
+	  ),
+  date = Sys.Date()
+)
+```
+
+```{r eval = source_code_eval, echo = T}
+tibble(
+  lucky_number = sample(0:9, 1) %>% # Extract
+	  switch(
+	    "0" = "Zero",
+	    "1" = "One",
+	    "2" = "Two",
+	    "3" = "Three",
+	    "4" = "Four",
+	    "5" = "Five",
+	    "6" = "Six",
+	    "7" = "Seven",
+	    "8" = "Eight",
+	    "9" = "Nine"
+	  ), # Transform
+  date = Sys.Date()
+) %>% write_csv("lucky_numbers.csv", append = T) # write_csv("data/06-others/lucky_numbers.csv", append = T)
+```
+
+```{r eval = source_code_eval, echo = T}
+library(mailR)
+send.mail(from = "sender@gmail.com", # 보내는 사람의 이메일 주소를 입력한다
+          to = "recipient@gmail.com", # 받는 사람의 이메일 주소를 입력한다 
+          subject = "Today lucky number : ", # 메일의 제목을 입력한다
+          body = "Good Luck!", # 메일의 본문 내용을 입력한다
+          smtp = list( # 메일을 보내는 SMTP 프로토콜 설정값들을 입력하는 부분이다
+            host.name = "smtp.gmail.com", 
+            port = 465, 
+            user.name = "gmail_id", # 구글계정의 아이디를 입력한다
+            passwd = "password", # 구글계정의 비밀번호를 입력한다
+            ssl = TRUE
+          ),
+          authenticate = T) # 설정한 SMTP 를 연결하기 위해 인증이 요구되는지의 여부이다. 본 예제의 Gmail 서비스는 TRUE 로 설정한다 
+```
+
+```{r eval = source_code_eval, echo = T}
+send.mail(from = "lt.lovetoken@gmail.com", 
+          to = "lt.lovetoken@gmail.com",
+          subject = "Today lucky number : ", 
+          body = "Good Luck!", 
+          smtp = list(host.name = "smtp.gmail.com", port = 465, user.name = "lt.lovetoken", passwd = rstudioapi::askForPassword(), ssl = T),
+          authenticate = T)
+```
+
+```{r eval = source_code_eval, echo = T}
+library(tidyveerse)
+library(mailR)
+
+lucky_num <- sample(0:9, 1) %>% 
+	switch(
+	    "0" = "Zero",
+	    "1" = "One",
+	    "2" = "Two",
+	    "3" = "Three",
+	    "4" = "Four",
+	    "5" = "Five",
+	    "6" = "Six",
+	    "7" = "Seven",
+	    "8" = "Eight",
+	    "9" = "Nine"
+	) # Extract & Transform
+
+send.mail(from = "sender@gmail.com", 
+          to = "recipient@gmail.com", 
+          subject = paste0("Today lucky number : ", lucky_num), # 행운숫자 서수를 붙인다
+          body = "Good Luck!",
+          smtp = list( 
+            host.name = "smtp.gmail.com", 
+            port = 465, 
+            user.name = "gmail_id", 
+            passwd = "password", 
+            ssl = TRUE
+          ),
+          authenticate = T)
+
+tibble(
+  lucky_number = lucky_num
+  date = Sys.Date()
+) %>% write_csv("lucky_numbers.csv", append = T) # Load
+```
+
+```{r eval = source_code_eval, echo = T}
+library(cronR)
+```
+
+```{r eval = source_code_eval, echo = T}
+cron_ls() # 터미널에서 "crontab -l" 를 입력하는 것과 동일
+```
+
+## Shiny Application 배포{#others-2}
+
+## Jekyll 과 Github Pages 를 이용한 블로그 만들기{#others-4}
+
+### Jekyll 의 설치{#others-4-1}
+
+#### Windows 에서 Jekyll 설치{#others-4-1-1}
+
+```{sh eval = source_code_eval, echo = T}
+$ gem install jekyll bundler
+```
+
+```{sh eval = source_code_eval, echo = T}
+$ jekyll -v
+```
+
+#### Mac 에서 Jekyll 설치{#others-4-1-2}
+
+```{sh eval = source_code_eval, echo = T}
+$ ruby -v
+```
+
+```{sh eval = source_code_eval, echo = T}
+$ brew install ruby
+```
+
+```{sh eval = source_code_eval, echo = T}
+$ gem install jekyll
+```
+
+```{sh eval = source_code_eval, echo = T}
+$ jekyll -v
+```
+
+### Jekyll 을 이용한 기본 블로그 페이지 만들기{#others-4-2}
+
+```{sh eval = source_code_eval, echo = T}
+$ jekyll new myblog
+```
+
+```{sh eval = source_code_eval, echo = T}
+$ cd myblog
+```
+
+```{sh eval = source_code_eval, echo = T}
+$ bundle exec jekyll serve
+```
+
+### Jekyll 동작원리{#others-4-3}
+
+```{sh eval = source_code_eval, echo = T}
+$ bundle exec jekyll serve
+```
+
+### Github Pages 에 블로그 호스팅 하기{#others-4-4}
+
+```{sh eval = source_code_eval, echo = T}
+$ git config --global user.name "Your Name"
+$ git config --global user.email you@example.com
+```
+
+```{sh eval = source_code_eval, echo = T}
+$ git add -A
+$ git commit -m 'site commit'
+$ git push
+```
+
+### 더 알아보기{-}
+
+## bookdown 패키지를 이용한 전자책 만들기{#others-5}
+
+## RStudio Cloud 서비스를 이용한 활용예제{#others-1}
+
+### 더 알아보기{-}

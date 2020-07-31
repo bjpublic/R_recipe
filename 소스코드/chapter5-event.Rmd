@@ -1,0 +1,223 @@
+```{r echo = F, warning = F, message = F}
+pacman::p_load(arrow, bit64, caret, corrplot, cowplot, cronR, data.table, DBI, DT, foreign, fst, ggplot2, jsonlite, knitr, lubridate, magrittr, mlbench, patchwork, plotly, rbenchmark, RSQLite, scales, sessioninfo, tibble, tidyquant, tidyr, tidyverse)
+opts_chunk$set(fig.path = "output/figure/", fig.align = "center", out.width = "95%", warning = F, message = F)
+theme_set(theme_bw(base_family = "AppleGothic"))
+source_code_eval <- F
+```
+
+# 분석과정중에서 무한히 일어나는 난관들의 대처법{#event}
+
+## 데이터 동일성∙정합성 관리{#event-1}
+
+### 동일성 판단{#event-1-1}
+
+```{r eval = source_code_eval, echo = T}
+a == b
+```
+
+```{r eval = source_code_eval, echo = T}
+a <- 2/3
+b <- 804/1206
+```
+
+```{r eval = source_code_eval, echo = T}
+a == b
+```
+
+```{r eval = source_code_eval, echo = T}
+mtcars == mtcars
+```
+
+```{r eval = source_code_eval, echo = T}
+a <- mtcars %>% 
+  group_by(carb, gear) %>% 
+  summarise(avg_hp = mean(hp))
+
+a
+```
+
+```{r eval = source_code_eval, echo = T}
+b <- mtcars %>% 
+  group_by(gear, carb) %>% 
+  summarise(sum_hp = sum(hp), group_n = n()) %>% 
+  mutate(avg_hp = sum_hp / group_n) %>% 
+  select(-sum_hp, -group_n)
+
+b
+```
+
+```{r eval = source_code_eval, echo = T}
+all.equal(a, b)
+```
+
+```{r eval = source_code_eval, echo = T}
+a == b
+```
+
+### Snapshot{#event-1-2}
+
+```{r eval = source_code_eval, echo = T}
+library(tidyquant)
+
+d <- tq_get("AAPL")
+d
+```
+
+```{r eval = source_code_eval, echo = T}
+tq_get("AAPL") %>% 
+  write_csv(paste0("data/05-event/AAPL_", Sys.Date(), ".csv"))
+```
+
+```{r eval = source_code_eval, echo = T}
+tq_get("AAPL") %>% 
+  mutate(loadingtime = now())
+```
+
+## 결측값 관리{#event-2}
+
+### 결측값 찾기{#event-2-1}
+
+```{r eval = source_code_eval, echo = T, collapse = T}
+na1 <- c(NA, 2, 4, NA, 8, 4, NA)
+is.na(na1)
+
+na2 <- c("A", "A", "A", "B", "B", "B", NA)
+is.na(na2)
+```
+
+```{r eval = source_code_eval, echo = T}
+na_df <- tibble(na1, na2)
+na_df
+
+is.na(na_df)
+```
+
+```{r eval = source_code_eval, echo = T}
+na_df %>% 
+	is.na %>% 
+	rowSums
+```
+
+```{r eval = source_code_eval, echo = T}
+n <- na_df %>% 
+	is.na %>% 
+	rowSums %>% 
+	magrittr::is_greater_than(0) # is_greater_than() 함수는 `>` 연산자의 수행을 대신하는 magrittr 패키지의 함수이다.
+
+n
+```
+
+```{r eval = source_code_eval, echo = T}
+na_df[!n, ]
+```
+
+```{r eval = source_code_eval, echo = T}
+na_df %>% na.omit
+na_df %>% drop_na
+```
+
+### 결측값 보간{#event-2-2}
+
+```{r eval = source_code_eval, echo = T}
+na_df
+na_df %>% 
+	replace_na(list(na1 = 0, na2 = "C"))
+```
+
+```{r eval = source_code_eval, echo = T}
+na_df2 <- tibble(
+  Time = 1:15, 
+  X = c(6.1, NA, 7.3, NA, 6.3, 6.4, 7.9, 8.2, 9.1, 9.4, NA, 9.0, 9.2, 8.9, 9.2)
+)
+
+na_df2
+```
+
+```{r eval = source_code_eval, echo = T}
+na_df2 %>%
+  mutate(
+    mean_imputation_X = replace(X, is.na(X), mean(X, na.rm = T)),
+    median_imputation_X = replace(X, is.na(X), median(X, na.rm = T))
+  )
+
+```
+
+```{r eval = source_code_eval, echo = T}
+na_df2 %>% 
+  fill(X)
+```
+
+```{r eval = source_code_eval, echo = T}
+na_df2 %>% 
+  fill(X, .direction = "up") # 이전값이 아닌 이후값으로 대치가 된 예제
+```
+
+### 더 알아보기{-}
+
+## 분석이미지 백업을 통한 재현가능성 확보{#event-3}
+
+```{r eval = source_code_eval, echo = T}
+ls()
+```
+
+```{r eval = source_code_eval, echo = T}
+save.image()
+```
+
+```{r eval = source_code_eval, echo = T}
+load(".RData")
+ls()
+```
+
+## 코드 벤치마킹{#event-5}
+
+```{r eval = source_code_eval, echo = T}
+library(caret)
+library(mlbench)
+data(BostonHousing)
+
+fit1 <- train(medv ~ ., data = BostonHousing, method = "rf")
+```
+
+```{r eval = source_code_eval, echo = T}
+system.time(
+  fit1 <- train(medv ~ ., data = BostonHousing, method = "rf")
+)
+```
+
+```{r eval = source_code_eval, echo = T}
+system.time(
+  fit2 <- train(medv ~ ., data = BostonHousing, method = "lm")
+)
+```
+
+### rbenchmark 패키지{#event-5-1}
+
+```{r eval = source_code_eval, echo = T}
+library(rbenchmark)
+```
+
+```{r eval = source_code_eval, echo = T}
+system.time(
+  fit3 <- train(medv ~ ., data = BostonHousing, method = "qrf")
+)
+```
+
+```{r eval = source_code_eval, echo = T}
+benchmark(
+  replications = 10,
+  train(medv ~ ., data = BostonHousing, method = "rf"),
+  train(medv ~ ., data = BostonHousing, method = "qrf"), 
+  columns = c("test", "elapsed", "replications")
+)
+```
+
+### RStudio 의 Profile 기능{#event-5-2}
+
+```{r eval = source_code_eval, echo = T}
+library(profvis)
+
+profvis(
+  train(medv ~ ., data = BostonHousing, method = "rf")
+)
+```
